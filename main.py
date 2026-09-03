@@ -1,136 +1,118 @@
+import os
+import sys
 import logging
 import asyncio
 from datetime import datetime
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-import os
-from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
-
-# Configure logging
+# Configure logging first
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-# Import modules
+# Load environment variables
+from dotenv import load_dotenv
+load_dotenv()
+
+logger.info("🚀 Starting bot initialization...")
+
 try:
+    # Import all modules
     from news_fetcher import NewsFetcher
     from ai_analyzer import AIAnalyzer
     from telegram_notifier import TelegramNotifier
     from config import UPDATE_FREQUENCY, IMPACT_LEVELS
-    logger.info("✅ All modules imported successfully")
-except Exception as e:
-    logger.error(f"❌ Error importing modules: {e}")
-    raise
+    from apscheduler.schedulers.asyncio import AsyncIOScheduler
+    logger.info("✅ All imports successful")
+except ImportError as e:
+    logger.error(f"❌ Import error: {e}")
+    sys.exit(1)
 
 class NiftyNewsBot:
     """Main bot class"""
     
     def __init__(self):
-        try:
-            self.news_fetcher = NewsFetcher()
-            self.ai_analyzer = AIAnalyzer()
-            self.telegram_notifier = TelegramNotifier()
-            self.processed_news = set()
-            logger.info("✅ Bot initialized successfully")
-        except Exception as e:
-            logger.error(f"❌ Error initializing bot: {e}")
-            raise
+        logger.info("Initializing bot...")
+        self.news_fetcher = NewsFetcher()
+        self.ai_analyzer = AIAnalyzer()
+        self.telegram_notifier = TelegramNotifier()
+        self.processed_news = set()
+        logger.info("✅ Bot initialized")
     
     async def check_and_notify_news(self):
         """Check news and send notifications"""
         try:
-            logger.info(f"🔍 Checking news at {datetime.now()}")
+            logger.info("🔍 Checking news...")
             
-            # Fetch news
             all_news = self.news_fetcher.fetch_all_news()
-            logger.info(f"📰 Fetched {len(all_news)} news items")
+            logger.info(f"📰 Fetched {len(all_news)} items")
             
             if not all_news:
-                logger.info("ℹ️ No news found")
                 return
             
-            # Filter recent news
             recent_news = self.news_fetcher.filter_recent_news(all_news, minutes=UPDATE_FREQUENCY)
-            logger.info(f"📌 Found {len(recent_news)} recent news items")
+            logger.info(f"📌 Recent news: {len(recent_news)}")
             
             if not recent_news:
                 return
             
-            # Process news
-            for news in recent_news[:5]:  # Limit to 5 per cycle
+            for news in recent_news[:3]:
                 try:
                     news_id = f"{news.get('stock')}_{news.get('headline')}"
-                    
                     if news_id in self.processed_news:
                         continue
                     
-                    # Analyze with AI
                     analyzed = self.ai_analyzer.process_news(news)
-                    impact = analyzed["impact_analysis"].get("impact_level")
+                    impact = analyzed["impact_analysis"].get("impact_level", "LOW")
                     
                     if impact in IMPACT_LEVELS:
-                        # Send notification
                         await self.telegram_notifier.send_notification(analyzed)
                         self.processed_news.add(news_id)
-                        logger.info(f"✅ Sent {impact} impact news")
+                        logger.info(f"✅ Sent {impact} news")
                     
-                    await asyncio.sleep(1)  # Delay between messages
-                    
+                    await asyncio.sleep(1)
                 except Exception as e:
                     logger.error(f"Error processing news: {e}")
                     continue
             
-            logger.info("✨ News check completed")
-            
+            logger.info("✨ Check completed")
         except Exception as e:
             logger.error(f"❌ Error in check_and_notify_news: {e}")
     
-    async def start_scheduler(self):
-        """Start the scheduler"""
+    async def start(self):
+        """Start bot scheduler"""
         try:
             scheduler = AsyncIOScheduler()
-            
-            # Schedule job
             scheduler.add_job(
                 self.check_and_notify_news,
                 'interval',
                 minutes=UPDATE_FREQUENCY,
-                id='nifty_news_job'
+                id='news_job'
             )
             
-            logger.info(f"⏱️ Scheduler configured: Every {UPDATE_FREQUENCY} minutes")
-            
+            logger.info(f"⏱️ Scheduler: Every {UPDATE_FREQUENCY} minutes")
             scheduler.start()
             logger.info("✅ Scheduler started!")
             
             # Send startup message
             self.telegram_notifier.send_startup_message()
             
-            # Run first check immediately
+            # Run first check
             await self.check_and_notify_news()
             
-            # Keep running
-            try:
-                await asyncio.Event().wait()
-            except KeyboardInterrupt:
-                logger.info("🛑 Shutting down...")
-                scheduler.shutdown()
-        
+            # Keep alive
+            await asyncio.Event().wait()
         except Exception as e:
-            logger.error(f"❌ Error in scheduler: {e}")
+            logger.error(f"❌ Scheduler error: {e}")
             raise
 
 async def main():
     """Main entry point"""
-    logger.info("🚀 Starting Nifty 500 News Bot...")
-    
     try:
+        logger.info("🚀 Starting Nifty 500 News Bot...")
         bot = NiftyNewsBot()
-        await bot.start_scheduler()
+        await bot.start()
     except Exception as e:
         logger.error(f"❌ Fatal error: {e}")
         raise
