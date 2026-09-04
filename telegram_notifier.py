@@ -1,5 +1,4 @@
 from telegram import Bot
-from telegram.error import TelegramError
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID, IMPACT_LEVELS
 import logging
 from datetime import datetime
@@ -8,14 +7,17 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class TelegramNotifier:
-    """Send notifications to Telegram"""
+    """Send Telegram messages"""
     
     def __init__(self):
-        self.bot = Bot(token=TELEGRAM_BOT_TOKEN)
-        self.chat_id = TELEGRAM_CHAT_ID
+        try:
+            self.bot = Bot(token=TELEGRAM_BOT_TOKEN)
+            self.chat_id = TELEGRAM_CHAT_ID
+        except Exception as e:
+            logger.error(f"Telegram init error: {e}")
     
     def format_message(self, news_analysis):
-        """Format news analysis into Telegram message"""
+        """Format message"""
         try:
             original = news_analysis["original_data"]
             impact = news_analysis["impact_analysis"]
@@ -25,79 +27,56 @@ class TelegramNotifier:
             if impact.get("impact_level") not in IMPACT_LEVELS:
                 return None
             
-            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            
-            message = f"""
-📈 *NIFTY 500 NEWS ALERT* 📈
-═══════════════════════════════
+            msg = f"""
+📈 *NIFTY 500 ALERT*
+━━━━━━━━━━━━━━━━━
+🏢 {original.get('stock', 'NIFTY500')}
+⏰ {datetime.now().strftime('%H:%M')}
+🎯 {impact.get('impact_level')}
 
-🏢 Stock: *{original.get('stock', 'NIFTY500')}*
-⏰ Time: {timestamp}
-🎯 Impact: *{impact.get('impact_level')}*
+📰 {original.get('headline', '')[:100]}
 
-📰 *Headline:*
-{original.get('headline', 'N/A')[:200]}
+📌 தமிழ்: {tamil[:100]}
 
-📌 *தமிழ்:*
-{tamil[:200]}
-
-💡 *Action:* {insight.get('action', 'WATCH')}
-
-═══════════════════════════════
+💡 {insight.get('action', 'WATCH')}
+━━━━━━━━━━━━━━━━━
             """
-            
-            return message
+            return msg
         except Exception as e:
-            logger.error(f"Error formatting message: {e}")
+            logger.error(f"Format error: {e}")
             return None
     
     async def send_notification(self, news_analysis):
-        """Send message to Telegram"""
+        """Send message"""
         try:
-            message = self.format_message(news_analysis)
-            
-            if message is None:
-                logger.info("Skipped low impact news")
+            msg = self.format_message(news_analysis)
+            if msg is None:
                 return False
             
-            await self.bot.send_message(
-                chat_id=self.chat_id,
-                text=message,
-                parse_mode='Markdown'
-            )
-            
-            logger.info(f"Message sent for {news_analysis['original_data'].get('stock')}")
+            await self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode='Markdown')
+            logger.info(f"Sent: {news_analysis['original_data'].get('stock')}")
             return True
         except Exception as e:
-            logger.error(f"Error sending notification: {e}")
+            logger.error(f"Send error: {e}")
             return False
     
     def send_startup_message(self):
-        """Send startup notification"""
+        """Startup message"""
         try:
-            message = """
-🤖 *NIFTY 500 NEWS BOT* 🤖
-═══════════════════════════════
+            msg = """
+🤖 *NIFTY 500 BOT*
+━━━━━━━━━━━━━━━━━
+✅ Bot Started!
 
-✅ Bot Started Successfully!
+📊 Tracking Nifty 500
+⏱️ Updates every 30 min
+🎯 HIGH & MEDIUM impact
+📝 English + Tamil
 
-📊 Configuration:
-• Tracking: All Nifty 500 Stocks
-• Frequency: Every 30 minutes
-• Impact Level: HIGH & MEDIUM only
-• Languages: English + Tamil
-
-🔔 Ready to send updates!
-
-═══════════════════════════════
+Ready to send updates!
+━━━━━━━━━━━━━━━━━
             """
-            
-            self.bot.send_message(
-                chat_id=self.chat_id,
-                text=message,
-                parse_mode='Markdown'
-            )
-            
+            self.bot.send_message(chat_id=self.chat_id, text=msg, parse_mode='Markdown')
             logger.info("Startup message sent")
         except Exception as e:
-            logger.error(f"Error sending startup message: {e}")
+            logger.error(f"Startup error: {e}")
